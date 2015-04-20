@@ -28,25 +28,38 @@ Cannot defense xss in browser which is belowed IE7
 import re
 try:
 	from html.parser import HTMLParser
-except:
+except ImportError:
 	from HTMLParser import HTMLParser
 
+_SET_TRUE_FALSE = set(["true", "false"])
+_NODE_A_LIMIT = {"target": set(["_blank", "_self"])}
+_NODE_EMBED_LIMIT = {
+        "type": set(["application/x-shockwave-flash"]),
+        "wmode": set(["transparent", "window", "opaque"]),
+        "play": _SET_TRUE_FALSE,
+        "loop": _SET_TRUE_FALSE,
+        "menu": _SET_TRUE_FALSE,
+        "allowfullscreen": _SET_TRUE_FALSE,
+}
+_TRUE_URL_RE = re.compile(r"^(http|https|ftp)://.+", re.I | re.S)
+_TRUE_STYLE_RE_1 = re.compile(r"(\\|&#|/\*|\*/)")
+_TRUE_STYLE_RE_2 = re.compile(r"e.*x.*p.*r.*e.*s.*s.*i.*o.*n")
 class XssHtml(HTMLParser):
-	allow_tags = ['a', 'img', 'br', 'strong', 'b', 'code', 'pre',
+	allow_tags = set(['a', 'img', 'br', 'strong', 'b', 'code', 'pre',
 				  'p', 'div', 'em', 'span', 'h1', 'h2', 'h3', 'h4',
 				  'h5', 'h6', 'blockquote', 'ul', 'ol', 'tr', 'th', 'td',
 				  'hr', 'li', 'u', 'embed', 's', 'table', 'thead', 'tbody',
-				  'caption', 'small', 'q', 'sup', 'sub']
-	common_attrs = ["id", "style", "class", "name"]
-	nonend_tags = ["img", "hr", "br", "embed"]
+				  'caption', 'small', 'q', 'sup', 'sub'])
+	common_attrs = set(["id", "style", "class", "name"])
+	nonend_tags = set(["img", "hr", "br", "embed"])
 	tags_own_attrs = {
-		"img": ["src", "width", "height", "alt", "align"], 
-		"a": ["href", "target", "rel", "title"],
-		"embed": ["src", "width", "height", "type", "allowfullscreen", "loop", "play", "wmode", "menu"],
-		"table": ["border", "cellpadding", "cellspacing"],
+		"img": set(["src", "width", "height", "alt", "align"]),
+		"a": set(["href", "target", "rel", "title"]),
+		"embed": set(["src", "width", "height", "type", "allowfullscreen", "loop", "play", "wmode", "menu"]),
+		"table": set(["border", "cellpadding", "cellspacing"]),
 	}
 
-	def __init__(self, allows = []):
+	def __init__(self, allows=None):
 		HTMLParser.__init__(self)
 		self.allow_tags = allows if allows else self.allow_tags
 		self.result = []
@@ -57,12 +70,8 @@ class XssHtml(HTMLParser):
 		"""
 		Get the safe html code
 		"""
-		for i in range(0, len(self.result)):
-			tmp = self.result[i].rstrip('\n')
-			tmp = tmp.lstrip('\n')
-			if tmp:
-				self.data.append(tmp)
-		return ''.join(self.data)
+                tmp = map(lambda i: self.result[i].strip('\n'), range(0, len(self.result)))
+                return ''.join(tmp)
 
 	def handle_startendtag(self, tag, attrs):
 		self.handle_starttag(tag, attrs)
@@ -113,37 +122,27 @@ class XssHtml(HTMLParser):
 		attrs = self.__common_attr(attrs)
 		attrs = self.__get_link(attrs, "href")
 		attrs = self.__set_attr_default(attrs, "target", "_blank")
-		attrs = self.__limit_attr(attrs, {
-			"target": ["_blank", "_self"]
-		})
+		attrs = self.__limit_attr(attrs, _NODE_A_LIMIT)
 		return attrs
 
 	def node_embed(self, attrs):
 		attrs = self.__common_attr(attrs)
 		attrs = self.__get_link(attrs, "src")
-		attrs = self.__limit_attr(attrs, {
-			"type": ["application/x-shockwave-flash"],
-			"wmode": ["transparent", "window", "opaque"],
-			"play": ["true", "false"],
-			"loop": ["true", "false"],
-			"menu": ["true", "false"],
-			"allowfullscreen": ["true", "false"]
-		})
+		attrs = self.__limit_attr(attrs, _NODE_EMBED_LIMIT)
 		attrs["allowscriptaccess"] = "never"
 		attrs["allownetworking"] = "none"
 		return attrs
 
 	def __true_url(self, url):
-		prog = re.compile(r"^(http|https|ftp)://.+", re.I | re.S)
-		if prog.match(url):
+		if _TRUE_URL_RE.match(url):
 			return url
 		else:
 			return "http://%s" % url
 
 	def __true_style(self, style):
 		if style:
-			style = re.sub(r"(\\|&#|/\*|\*/)", "_", style)
-			style = re.sub(r"e.*x.*p.*r.*e.*s.*s.*i.*o.*n", "_", style)
+			style = _TRUE_STYLE_RE_1.sub("_", style)
+			style = _TRUE_STYLE_RE_2.sub("_", style)
 		return style
 
 	def __get_style(self, attrs):
@@ -163,7 +162,7 @@ class XssHtml(HTMLParser):
 			other = []
 		if attrs:
 			for (key, value) in attrs.items():
-				if key not in self.common_attrs + other:
+				if key not in self.common_attrs and key not in other:
 					del attrs[key]
 		return attrs
 
