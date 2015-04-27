@@ -118,6 +118,11 @@ class XssHtml(HTMLParser):
 		attrs = self.__common_attr(attrs)
 		return attrs
 
+	def node_img(self, attrs):
+		attrs = self.__common_attr(attrs)
+		attrs = self.__get_link(attrs, "src")
+		return attrs
+
 	def node_a(self, attrs):
 		attrs = self.__common_attr(attrs)
 		attrs = self.__get_link(attrs, "href")
